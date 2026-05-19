@@ -1,0 +1,12 @@
+;;;Deposition parameters;;;;;Sulfurization parameters;;;;;;;
+Date;Sample ID;Sample name;Elements;Cu source power;Sn source power;Zn source power;Pressure (in mtorr);Source temperature (in deg.C);Process temperature (in deg. C);Chamber pressure (in mbar);Process time (in min);Cooling time (in min);Cooling rate (deg C/min);;
+2026-03-17;113790;CuSnZnS_36;Cu, Sn, Zn;12;4;14;5;130;550;100;10;60;8,333333333;;
+2026-03-30;149735;CuSnZnS_39;Cu, Sn, Zn;54;35;40;5;130;550;100;10;60;8,333333333;;
+2026-03-31;184812;CuSnZnS_40;Cu, Sn, Zn;99;70;61;5;130;550;100;10;60;8,333333333;;
+2026-03-31;217100;CuSnZnS_41;Cu, Sn, Zn;53;37;45;15;130;550;100;10;60;8,333333333;;
+2026-03-05;249606;CuSnZnS_31;Cu, Sn, Zn;94;70;64;15;130;550;100;10;60;8,333333333;;
+2026-03-05;283399;CuSnZnS_32;Cu, Sn, Zn;90;70;66;25;130;550;100;10;60;8,333333333;;
+2026-04-23;184812;CuSnZnS_46;Cu, Sn, Zn;99;70;61;5;130;550;100;10;60;8,333333333;;
+2026-04-27;184812;CuSnZnS_50;Cu, Sn, Zn;99;70;61;5;130;550;100;10;60;8,333333333;;
+2026-04-28;184812;CuSnZnS_51;Cu, Sn, Zn;99;70;61;5;150;550;100;10;60;8,333333333;;
+2026-04-29;184812;CuSnZnS_52;Cu, Sn, Zn;99;70;61;5;130;500;100;10;;-;;

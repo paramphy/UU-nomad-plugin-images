@@ -47,7 +47,7 @@ dev = [
 extra-index-url = [
   "https://gitlab.mpcdf.mpg.de/api/v4/projects/2187/packages/pypi/simple",
 ]
-    
+
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
 exclude = [
@@ -130,6 +130,7 @@ where = ["src"]
 [project.entry-points.'nomad.plugin']
 image_parser = "nomad_plugin_images.parsers:image_parser"
 manifest_parser = "nomad_plugin_images.parsers:manifest_parser"
+hierarchical_parser = "nomad_plugin_images.parsers:hierarchical_parser"
 schema_package_entry_point = "nomad_plugin_images.schema_packages:schema_package_entry_point"
 
 app_entry_point = "nomad_plugin_images.apps:app_entry_point"

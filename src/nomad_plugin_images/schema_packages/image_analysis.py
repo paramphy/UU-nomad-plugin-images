@@ -305,7 +305,7 @@ class ImageMetadata(ArchiveSection):
 class ImageData(PlotSection, ArchiveSection):
     """
     Complete image data entry containing acquisition metadata, dimensions, and ROI.
-    
+
     Represents one image capture with:
     - Acquisition settings (exposure, gain, bit depth, timestamp)
     - Image dimensions (height, width, channels)
@@ -369,12 +369,12 @@ class ImageData(PlotSection, ArchiveSection):
             logger (BoundLogger): A structlog logger.
         """
         super().normalize(archive, logger)
-    
+
     def _create_image_visualization(self, npy_path: Path, logger) -> None:
         """
         Create a Plotly visualization of the image with ROI overlay.
         Optimized for large images by downsampling for display.
-        
+
         Args:
             npy_path: Path to the .npy file
             logger: Structlog logger
@@ -382,33 +382,33 @@ class ImageData(PlotSection, ArchiveSection):
         try:
             # Load numpy array header only first to check size
             img_data = np.load(npy_path)
-            
+
             if logger:
                 logger.info(f'Loaded image with shape: {img_data.shape}, dtype: {img_data.dtype}')
-            
+
             # Downsample large images for faster visualization
             max_display_size = 1000
             img_display = img_data.copy()
-            
+
             if img_display.shape[0] > max_display_size or img_display.shape[1] > max_display_size:
                 # Calculate downsampling factor
                 scale_h = max(1, img_display.shape[0] // max_display_size)
                 scale_w = max(1, img_display.shape[1] // max_display_size)
                 scale = max(scale_h, scale_w)
-                
+
                 # Downsample using slicing (fast)
                 img_display = img_display[::scale, ::scale]
                 if len(img_display.shape) == 3:
                     img_display = img_display[:, :, :3] if img_display.shape[2] >= 3 else img_display
-                
+
                 if logger:
                     logger.info(f'Downsampled image from {img_data.shape} to {img_display.shape} (scale factor: {scale}x)')
-            
+
             # Normalize image data for visualization (0-255)
             img_normalized = img_display.astype(np.float32)
             if img_normalized.max() > 0:
                 img_normalized = (img_normalized / img_normalized.max() * 255).astype(np.uint8)
-            
+
             # For RGB images, use as-is; for single channel, convert to grayscale
             if len(img_display.shape) == 3 and img_display.shape[2] >= 3:
                 # Use first 3 channels as RGB
@@ -423,10 +423,10 @@ class ImageData(PlotSection, ArchiveSection):
                 if logger:
                     logger.warning(f'Unexpected image shape: {img_display.shape}')
                 return
-            
+
             # Create Plotly figure with image
             fig = go.Figure()
-            
+
             # Add image (note: go.Image doesn't support showscale)
             fig.add_trace(
                 go.Image(
@@ -434,11 +434,11 @@ class ImageData(PlotSection, ArchiveSection):
                     name='Image',
                 )
             )
-            
+
             # Add ROI visualization if available
             if self.roi and self.roi.bounding_box:
                 bbox = self.roi.bounding_box
-                
+
                 # If we downsampled, scale ROI coordinates
                 if 'scale' in locals():
                     bbox_x_min = bbox.x_min // scale
@@ -450,7 +450,7 @@ class ImageData(PlotSection, ArchiveSection):
                     bbox_y_min = bbox.y_min
                     bbox_x_max = bbox.x_max
                     bbox_y_max = bbox.y_max
-                
+
                 # Add rectangle for bounding box
                 fig.add_shape(
                     type='rect',
@@ -460,11 +460,11 @@ class ImageData(PlotSection, ArchiveSection):
                     name='ROI Bounding Box',
                     label=dict(text='ROI', textposition='top center'),
                 )
-                
+
                 # Add circle for circular ROI
                 if self.roi.center_x_px is not None and self.roi.center_y_px is not None:
                     radius = self.roi.radius_px if self.roi.radius_px else 50
-                    
+
                     # Scale center if downsampled
                     if 'scale' in locals():
                         center_x = self.roi.center_x_px // scale
@@ -474,12 +474,12 @@ class ImageData(PlotSection, ArchiveSection):
                         center_x = self.roi.center_x_px
                         center_y = self.roi.center_y_px
                         display_radius = radius
-                    
+
                     # Create circle using path
                     theta = np.linspace(0, 2 * np.pi, 50)  # Reduced points for speed
                     circle_x = center_x + display_radius * np.cos(theta)
                     circle_y = center_y + display_radius * np.sin(theta)
-                    
+
                     fig.add_trace(
                         go.Scatter(
                             x=circle_x, y=circle_y,
@@ -494,7 +494,7 @@ class ImageData(PlotSection, ArchiveSection):
                             )),
                         )
                     )
-            
+
             # Update layout
             fig.update_layout(
                 title=dict(
@@ -512,13 +512,13 @@ class ImageData(PlotSection, ArchiveSection):
                 yaxis=dict(scaleanchor='x', scaleratio=1),
                 xaxis=dict(scaleanchor='y', scaleratio=1),
             )
-            
+
             # Store the figure
             self.figures = [PlotlyFigure(label='Image with ROI', figure=fig.to_plotly_json())]
-            
+
             if logger:
                 logger.info(f'Successfully created image visualization with ROI overlay')
-        
+
         except Exception as e:
             if logger:
                 logger.error(f'Error in image visualization: {str(e)}')
@@ -529,7 +529,7 @@ class ImageData(PlotSection, ArchiveSection):
 class ImageStep(ArchiveSection):
     """
     A single image acquisition step in an experiment.
-    
+
     Contains metadata about one image measurement including:
     - Step number and timestamp
     - Link to the full image data
@@ -591,7 +591,7 @@ class ImageStep(ArchiveSection):
 class ImageExperimentRun(EntryData, ArchiveSection):
     """
     An image experiment run containing multiple image acquisition steps.
-    
+
     This is the main entry point for manifest-based image analysis,
     containing:
     - Experiment metadata (run_id, name)
@@ -644,10 +644,286 @@ class ImageExperimentRun(EntryData, ArchiveSection):
         super().normalize(archive, logger)
 
 
+class SampleSynthesisInfo(ArchiveSection):
+    """
+    Synthesis information for a material sample.
+
+    Captures all parameters used to synthesize/create the sample,
+    such as deposition parameters, temperature, pressure, source power settings, etc.
+    """
+
+    m_def = Section(
+        a_eln=ELNAnnotation(
+            properties=SectionProperties(
+                order=[
+                    "sample_id",
+                    "sample_name",
+                    "date",
+                    "elements",
+                    "cu_source_power",
+                    "sn_source_power",
+                    "zn_source_power",
+                    "pressure_mtorr",
+                    "source_temperature_degc",
+                    "process_temperature_degc",
+                    "chamber_pressure_mbar",
+                    "process_time_min",
+                    "cooling_time_min",
+                    "cooling_rate_degc_min",
+                ],
+            ),
+        ),
+    )
+
+    sample_id = Quantity(
+        type=str,
+        description='Sample identifier/batch number',
+        a_eln={
+            "component": "StringEditQuantity",
+        },
+    )
+
+    sample_name = Quantity(
+        type=str,
+        description='Human-readable sample name',
+        a_eln={
+            "component": "StringEditQuantity",
+        },
+    )
+
+    date = Quantity(
+        type=str,
+        description='Date of synthesis',
+        a_eln={
+            "component": "StringEditQuantity",
+        },
+    )
+
+    elements = Quantity(
+        type=str,
+        description='Elements in the sample composition',
+        a_eln={
+            "component": "StringEditQuantity",
+        },
+    )
+
+    cu_source_power = Quantity(
+        type=float,
+        description='Cu source power in watts',
+        a_eln={
+            "component": "NumberEditQuantity",
+            "defaultDisplayUnit": "watt",
+        },
+        unit="watt",
+    )
+
+    sn_source_power = Quantity(
+        type=float,
+        description='Sn source power in watts',
+        a_eln={
+            "component": "NumberEditQuantity",
+            "defaultDisplayUnit": "watt",
+        },
+        unit="watt",
+    )
+
+    zn_source_power = Quantity(
+        type=float,
+        description='Zn source power in watts',
+        a_eln={
+            "component": "NumberEditQuantity",
+            "defaultDisplayUnit": "watt",
+        },
+        unit="watt",
+    )
+
+    pressure_mtorr = Quantity(
+        type=float,
+        description='Deposition pressure in millitorr',
+        a_eln={
+            "component": "NumberEditQuantity",
+            "defaultDisplayUnit": "millitorr",
+        },
+        unit="millitorr",
+    )
+
+    source_temperature_degc = Quantity(
+        type=float,
+        description='Source temperature in Celsius',
+        a_eln={
+            "component": "NumberEditQuantity",
+            "defaultDisplayUnit": "kelvin",
+        },
+        unit="kelvin",
+    )
+
+    process_temperature_degc = Quantity(
+        type=float,
+        description='Process temperature in Celsius',
+        a_eln={
+            "component": "NumberEditQuantity",
+            "defaultDisplayUnit": "kelvin",
+        },
+        unit="kelvin",
+    )
+
+    chamber_pressure_mbar = Quantity(
+        type=float,
+        description='Chamber pressure in millibar',
+        a_eln={
+            "component": "NumberEditQuantity",
+            "defaultDisplayUnit": "millibar",
+        },
+        unit="millibar",
+    )
+
+    process_time_min = Quantity(
+        type=float,
+        description='Process time in minutes',
+        a_eln={
+            "component": "NumberEditQuantity",
+            "defaultDisplayUnit": "minute",
+        },
+        unit="minute",
+    )
+
+    cooling_time_min = Quantity(
+        type=float,
+        description='Cooling time in minutes',
+        a_eln={
+            "component": "NumberEditQuantity",
+            "defaultDisplayUnit": "minute",
+        },
+        unit="minute",
+    )
+
+    cooling_rate_degc_min = Quantity(
+        type=float,
+        description='Cooling rate in degrees Celsius per minute',
+        a_eln={
+            "component": "NumberEditQuantity",
+        },
+    )
+
+    def normalize(self, archive: 'EntryArchive', logger: 'BoundLogger') -> None:
+        """Normalize synthesis info."""
+        super().normalize(archive, logger)
+
+
+class ExperimentalResult(ArchiveSection):
+    """
+    Results from one experimental measurement on a sample.
+
+    Groups together:
+    - All images captured in one experimental session
+    - Common metadata for that experimental run
+    """
+
+    m_def = Section(
+        a_eln=ELNAnnotation(
+            properties=SectionProperties(
+                order=[
+                    "experiment_id",
+                    "description",
+                    "images",
+                ],
+            ),
+        ),
+    )
+
+    experiment_id = Quantity(
+        type=str,
+        description='Unique identifier for this experimental measurement (usually timestamp)',
+        a_eln={
+            "component": "StringEditQuantity",
+        },
+    )
+
+    description = Quantity(
+        type=str,
+        description='Description of the experimental measurement',
+        a_eln={
+            "component": "StringEditQuantity",
+        },
+    )
+
+    images = SubSection(
+        section_def=ImageData,
+        repeats=True,
+        description='Images captured in this experimental measurement',
+    )
+
+    def normalize(self, archive: 'EntryArchive', logger: 'BoundLogger') -> None:
+        """Normalize experimental result."""
+        super().normalize(archive, logger)
+
+
+class SampleWithExperiments(PlotSection, EntryData, ArchiveSection):
+    """
+    Complete entry for a sample with all its synthesis information and experimental results.
+
+    This is the top-level entry for the hierarchical data structure:
+    - Synthesis parameters (from sample JSON)
+    - Multiple experimental measurements (subfolders with images)
+    - Full visualization and traceability
+
+    Structure matches:
+    CuSnZnS_31_123456/
+    ├── CuSnZnS_31.json
+    └── 20260323_133521/
+        ├── metadata.json
+        └── image_raw.npy
+    """
+
+    m_def = Section(
+        a_eln=ELNAnnotation(
+            properties=SectionProperties(
+                order=[
+                    "name",
+                    "sample_folder_path",
+                    "synthesis_info",
+                    "experimental_results",
+                ],
+            ),
+        ),
+    )
+
+    name = Quantity(
+        type=str,
+        description='Sample identifier/name',
+        a_eln={
+            "component": "StringEditQuantity",
+        },
+    )
+
+    sample_folder_path = Quantity(
+        type=str,
+        description='Path to the sample folder (relative to upload root)',
+        a_eln={
+            "component": "StringEditQuantity",
+        },
+    )
+
+    synthesis_info = SubSection(
+        section_def=SampleSynthesisInfo,
+        description='Sample synthesis and preparation parameters',
+    )
+
+    experimental_results = SubSection(
+        section_def=ExperimentalResult,
+        repeats=True,
+        description='All experimental measurements performed on this sample',
+    )
+
+    def normalize(self, archive: 'EntryArchive', logger: 'BoundLogger') -> None:
+        """Normalize the complete sample entry with experiments."""
+        super().normalize(archive, logger)
+
+
 class SingleImageEntry(PlotSection, EntryData, ArchiveSection):
     """
     A standalone image entry (not part of an experiment run).
-    
+
     This is used when uploading a single metadata.json file directly
     without a manifest file. Includes visualization plots.
     """
@@ -707,13 +983,13 @@ class SingleImageEntry(PlotSection, EntryData, ArchiveSection):
             logger (BoundLogger): A structlog logger.
         """
         super().normalize(archive, logger)
-    
+
     def _create_image_visualization(self, npy_path: Path, logger) -> None:
         """
         Create a Plotly visualization of the image with ROI overlay.
         Optimized for large images by downsampling for display.
         (Same as ImageData._create_image_visualization)
-        
+
         Args:
             npy_path: Path to the .npy file
             logger: Structlog logger
@@ -721,33 +997,33 @@ class SingleImageEntry(PlotSection, EntryData, ArchiveSection):
         try:
             # Load numpy array header only first to check size
             img_data = np.load(npy_path)
-            
+
             if logger:
                 logger.info(f'Loaded image with shape: {img_data.shape}, dtype: {img_data.dtype}')
-            
+
             # Downsample large images for faster visualization
             max_display_size = 1000
             img_display = img_data.copy()
-            
+
             if img_display.shape[0] > max_display_size or img_display.shape[1] > max_display_size:
                 # Calculate downsampling factor
                 scale_h = max(1, img_display.shape[0] // max_display_size)
                 scale_w = max(1, img_display.shape[1] // max_display_size)
                 scale = max(scale_h, scale_w)
-                
+
                 # Downsample using slicing (fast)
                 img_display = img_display[::scale, ::scale]
                 if len(img_display.shape) == 3:
                     img_display = img_display[:, :, :3] if img_display.shape[2] >= 3 else img_display
-                
+
                 if logger:
                     logger.info(f'Downsampled image from {img_data.shape} to {img_display.shape} (scale factor: {scale}x)')
-            
+
             # Normalize image data for visualization (0-255)
             img_normalized = img_display.astype(np.float32)
             if img_normalized.max() > 0:
                 img_normalized = (img_normalized / img_normalized.max() * 255).astype(np.uint8)
-            
+
             # For RGB images, use as-is; for single channel, convert to grayscale
             if len(img_display.shape) == 3 and img_display.shape[2] >= 3:
                 # Use first 3 channels as RGB
@@ -762,10 +1038,10 @@ class SingleImageEntry(PlotSection, EntryData, ArchiveSection):
                 if logger:
                     logger.warning(f'Unexpected image shape: {img_display.shape}')
                 return
-            
+
             # Create Plotly figure with image
             fig = go.Figure()
-            
+
             # Add image
             fig.add_trace(
                 go.Image(
@@ -774,11 +1050,11 @@ class SingleImageEntry(PlotSection, EntryData, ArchiveSection):
                     showscale=False,
                 )
             )
-            
+
             # Add ROI visualization if available
             if self.roi and self.roi.bounding_box:
                 bbox = self.roi.bounding_box
-                
+
                 # If we downsampled, scale ROI coordinates
                 if 'scale' in locals():
                     bbox_x_min = bbox.x_min // scale
@@ -790,7 +1066,7 @@ class SingleImageEntry(PlotSection, EntryData, ArchiveSection):
                     bbox_y_min = bbox.y_min
                     bbox_x_max = bbox.x_max
                     bbox_y_max = bbox.y_max
-                
+
                 # Add rectangle for bounding box
                 fig.add_shape(
                     type='rect',
@@ -800,11 +1076,11 @@ class SingleImageEntry(PlotSection, EntryData, ArchiveSection):
                     name='ROI Bounding Box',
                     label=dict(text='ROI', textposition='top center'),
                 )
-                
+
                 # Add circle for circular ROI
                 if self.roi.center_x_px is not None and self.roi.center_y_px is not None:
                     radius = self.roi.radius_px if self.roi.radius_px else 50
-                    
+
                     # Scale center if downsampled
                     if 'scale' in locals():
                         center_x = self.roi.center_x_px // scale
@@ -814,12 +1090,12 @@ class SingleImageEntry(PlotSection, EntryData, ArchiveSection):
                         center_x = self.roi.center_x_px
                         center_y = self.roi.center_y_px
                         display_radius = radius
-                    
+
                     # Create circle using path
                     theta = np.linspace(0, 2 * np.pi, 50)  # Reduced points for speed
                     circle_x = center_x + display_radius * np.cos(theta)
                     circle_y = center_y + display_radius * np.sin(theta)
-                    
+
                     fig.add_trace(
                         go.Scatter(
                             x=circle_x, y=circle_y,
@@ -834,7 +1110,7 @@ class SingleImageEntry(PlotSection, EntryData, ArchiveSection):
                             )),
                         )
                     )
-            
+
             # Update layout
             fig.update_layout(
                 title=dict(
@@ -852,13 +1128,13 @@ class SingleImageEntry(PlotSection, EntryData, ArchiveSection):
                 yaxis=dict(scaleanchor='x', scaleratio=1),
                 xaxis=dict(scaleanchor='y', scaleratio=1),
             )
-            
+
             # Store the figure
             self.figures = [PlotlyFigure(label='Image with ROI', figure=fig.to_plotly_json())]
-            
+
             if logger:
                 logger.info(f'Successfully created image visualization with ROI overlay')
-        
+
         except Exception as e:
             if logger:
                 logger.error(f'Error in image visualization: {str(e)}')

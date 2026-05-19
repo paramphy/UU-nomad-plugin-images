@@ -1,60 +1,178 @@
 # nomad-plugin-images
 
-Nomad example template
+**A comprehensive NOMAD plugin for parsing and visualizing hierarchical image analysis data with synthesis parameters and experimental results.**
 
-This `nomad` plugin was generated with `Cookiecutter` along with `@nomad`'s [`cookiecutter-nomad-plugin`](https://github.com/FAIRmat-NFDI/cookiecutter-nomad-plugin) template.
+This plugin provides parsers for multiple data organization patterns commonly used in materials science:
+- Single image metadata (metadata.json + image_raw.npy)
+- Manifest-based experiments (CSV with multiple images)
+- **NEW:** Hierarchical samples with synthesis info and multiple experiments
 
-## Development
+---
 
-If you want to develop locally this plugin, clone the project and in the plugin folder, create a virtual environment (you can use Python 3.10, 3.11 or 3.12):
+## Features Overview
+
+### ✨ What This Plugin Does
+
+1. **Parses Hierarchical Sample Data**
+   - Links material synthesis parameters to experimental measurements
+   - Auto-discovers folder structures
+   - Handles multiple experiments per sample
+   - No configuration needed
+
+2. **Generates Interactive Visualizations**
+   - Automatic Plotly figure generation
+   - ROI overlays (circular ROI + bounding box)
+   - Interactive hover information
+   - Pan/zoom/download capabilities
+   - Automatic downsampling for large images
+
+3. **Handles Unit Conversion**
+   - Temperature: Celsius → Kelvin (automatic)
+   - Powers: watts with proper units
+   - Pressure: multiple units (mtorr, mbar)
+   - Time: seconds/minutes with unit assignment
+
+4. **Ensures Data Integrity**
+   - Graceful error handling
+   - Detailed logging
+   - Optional fields with sensible defaults
+   - Full parameter preservation
+
+---
+
+## Quick Start (30 seconds)
+
+### Data Structure
+
+```
+CuSnZnS_31_123456/                  ← Sample folder
+├── CuSnZnS_31.json                 ← Synthesis parameters
+└── 20260323_133521/                ← Experiment folder
+    ├── metadata.json               ← Acquisition settings
+    └── image_raw.npy               ← Image data
+```
+
+### Upload to NOMAD
+
+1. Organize data as above
+2. Upload the sample folder to NOMAD
+3. Select **HierarchicalSampleParser**
+4. Click Parse
+5. View: Complete entry with synthesis info + interactive image plots
+
+**For detailed quick start:** See [`QUICK_START.md`](QUICK_START.md)
+
+---
+
+## Available Parsers
+
+### 1. **HierarchicalSampleParser** (NEW)
+
+**Purpose:** Parse hierarchical sample data with synthesis info and experiments
+
+**Input:** Sample folder with:
+- Sample synthesis JSON (root level)
+- Multiple experimental subfolders (each with metadata.json + image_raw.npy)
+
+**Output:** `SampleWithExperiments` entry linking synthesis to experiments
+
+**Best for:** Complete experimental campaigns with material synthesis and multiple measurements
+
+```python
+hierarchical_parser = HierarchicalSampleParserEntryPoint(
+    name='HierarchicalSampleParser',
+    description='Parser for hierarchical sample data',
+    mainfile_name_re=r'^[A-Za-z0-9_]+\.json$',
+)
+```
+
+### 2. **ImageParser**
+
+**Purpose:** Parse individual image with metadata
+
+**Input:** `metadata.json` + `image_raw.npy` in same folder
+
+**Output:** `SingleImageEntry` with image data and visualization
+
+**Best for:** Standalone images or simple image acquisitions
+
+### 3. **ImageManifestParser**
+
+**Purpose:** Parse experiment manifest defining multiple image steps
+
+**Input:** CSV manifest file with multiple image folders
+
+**Output:** `ImageExperimentRun` with multiple `ImageStep` entries
+
+**Best for:** Sequential experimental steps defined in CSV
+
+---
+
+## Schema Classes
+
+### SampleWithExperiments (Top-level Entry)
+```
+├── name                          # Sample identifier
+├── sample_folder_path            # Folder path
+├── synthesis_info                # SampleSynthesisInfo
+│   ├── sample_id, sample_name
+│   ├── date, elements
+│   ├── cu/sn/zn_source_power [W]
+│   ├── source_temperature [K]
+│   ├── process_temperature [K]
+│   ├── chamber_pressure [mbar]
+│   └── process timing [min]
+│
+└── experimental_results[]        # ExperimentalResult (multiple)
+    ├── experiment_id
+    ├── description
+    └── images[]                  # ImageData
+        ├── metadata              # ImageMetadata
+        ├── dimensions            # ImageDimensions
+        ├── roi                   # RegionOfInterest
+        └── figures               # Plotly visualization
+```
+
+---
+
+## Installation & Development
+
+### Clone and Setup
+
 ```sh
 git clone https://github.com/marzieh-saeedimasine/nomad-plugin-images.git
 cd nomad-plugin-images
 python3.11 -m venv .pyenv
 . .pyenv/bin/activate
-```
-
-Make sure to have `pip` upgraded:
-```sh
 pip install --upgrade pip
-```
-
-We recommend installing `uv` for fast pip installation of the packages:
-```sh
 pip install uv
-```
-
-Install the `nomad-lab` package:
-```sh
 uv pip install -e '.[dev]'
 ```
 
-### Run the tests
+### Run Tests
 
-You can run locally the tests:
 ```sh
+# Run all tests
 python -m pytest -sv tests
-```
 
-where the `-s` and `-v` options toggle the output verbosity.
-
-Our CI/CD pipeline produces a more comprehensive test report using the `pytest-cov` package. You can generate a local coverage report:
-```sh
+# Run with coverage report
 uv pip install pytest-cov
 python -m pytest --cov=src tests
+
+# Run specific test
+python -m pytest tests/parsers/test_hierarchical_parser.py -v
 ```
 
-### Run linting and auto-formatting
+### Code Quality
 
-We use [Ruff](https://docs.astral.sh/ruff/) for linting and formatting the code. Ruff auto-formatting is also a part of the GitHub workflow actions. You can run locally:
-```sh
-ruff check .
+# Check formatting
 ruff format . --check
 ```
 
 ### Debugging
 
 For interactive debugging of the tests, use `pytest` with the `--pdb` flag. We recommend using an IDE for debugging, e.g., _VSCode_. If that is the case, add the following snippet to your `.vscode/launch.json`:
+
 ```json
 {
   "configurations": [
@@ -85,37 +203,69 @@ The settings configuration file `.vscode/settings.json` automatically applies th
 ### Documentation on Github pages
 
 To view the documentation locally, install the related packages using:
+
 ```sh
 uv pip install -r requirements_docs.txt
-```
-
-Run the documentation server:
-```sh
 mkdocs serve
 ```
 
+---
+
+## Documentation
+
+### User Guides
+- **[QUICK_START.md](QUICK_START.md)** - 30-second guide to get started
+- **[docs/how_to/hierarchical_data_parser.md](docs/how_to/hierarchical_data_parser.md)** - Complete user guide with examples
+
+### Technical Documentation
+- **[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** - What was implemented and why
+- **[docs/reference/hierarchical_design.md](docs/reference/hierarchical_design.md)** - Technical architecture and design decisions
+
+---
+
 ## Adding this plugin to NOMAD
 
-Currently, NOMAD has two distinct flavors that are relevant depending on your role as an user:
-1. [A NOMAD Oasis](#adding-this-plugin-in-your-nomad-oasis): any user with a NOMAD Oasis instance.
-2. [Local NOMAD installation and the source code of NOMAD](#adding-this-plugin-in-your-local-nomad-installation-and-the-source-code-of-nomad): internal developers.
-
-### Adding this plugin in your NOMAD Oasis
+### NOMAD Oasis
 
 Read the [NOMAD plugin documentation](https://nomad-lab.eu/prod/v1/staging/docs/howto/oasis/plugins_install.html) for all details on how to deploy the plugin on your NOMAD instance.
 
-### Adding this plugin in your local NOMAD installation and the source code of NOMAD
+### Local NOMAD Installation
 
-We now recommend using the dedicated [`nomad-distro-dev`](https://github.com/FAIRmat-NFDI/nomad-distro-dev) repository to simplify the process. Please refer to that repository for detailed instructions.
+We recommend using the dedicated [`nomad-distro-dev`](https://github.com/FAIRmat-NFDI/nomad-distro-dev) repository to simplify the process. Please refer to that repository for detailed instructions.
 
-## Publish note
-In the [GitHub actions workflow](./.github/workflows/publish.yml) for publishing the nomad-plugin-images plugin to PyPI, we commented out the `deploy` job . If you want to publish the plugin to `PyPI`, you need to set up your project in `PyPI`. There are several online tutorials on publishing a Python package to PyPI, e.g., [How to Publish a Python Package to PyPI](https://realpython.com/pypi-publish-python-package/). After that, you can uncomment the `deploy` job in the workflow file and push the changes to GitHub. The workflow will be triggered and the package will be published to `PyPI` when you create a new release on GitHub.
+---
 
-### Template update
+## Publishing
 
-We use [`cruft`](https://github.com/cruft/cruft) to update the project based on template changes. To run the check for updates locally, run `cruft update` in the root of the project. More details see the instructions on [`cruft` website](https://cruft.github.io/cruft/#updating-a-project).
+To publish this plugin to PyPI:
 
-## Main contributors
-| Name | E-mail     |
-|------|------------|
-| marzieh saeedimasine | [marzieh.saeedimasine@gmail.com](mailto:marzieh.saeedimasine@gmail.com)
+1. Set up your PyPI account and configure credentials
+2. Uncomment the `deploy` job in `.github/workflows/publish.yml`
+3. Create a release on GitHub
+4. The workflow will automatically publish to PyPI
+
+For detailed instructions, see [How to Publish a Python Package to PyPI](https://realpython.com/pypi-publish-python-package/).
+
+### Template Updates
+
+We use [`cruft`](https://github.com/cruft/cruft) to update the project based on template changes. To check for updates locally:
+
+```sh
+cruft update
+```
+
+More details on [`cruft` website](https://cruft.github.io/cruft/#updating-a-project).
+
+---
+
+## Main Contributors
+
+| Name                  | Email                             |
+|---                    |---                                |
+| Marzieh Saeedimasine  | marzieh.saeedimasine@gmail.com   |
+
+---
+
+## License
+
+This project is licensed under the Apache License 2.0. See the LICENSE file for details.
