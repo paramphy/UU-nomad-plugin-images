@@ -1,3 +1,3 @@
 data:
-  m_def: nomad_plugin_images.schema_packages.schema_package.NewSchemaPackage
-  name: Markus
+  m_def: nomad_plugin_images.schema_packages.image_analysis.SingleImageEntry
+  name: Test_Image_Entry

@@ -157,9 +157,9 @@ def test_parse_hierarchical_sample(temp_sample_hierarchy):
     assert synthesis.sample_id == '249606'
     assert synthesis.sample_name == 'CuSnZnS_31'
     assert synthesis.elements == 'Cu, Sn, Zn'
-    assert synthesis.cu_source_power == 94.0
-    assert synthesis.sn_source_power == 70.0
-    assert synthesis.zn_source_power == 64.0
+    assert synthesis.cu_source_power.magnitude == 94.0
+    assert synthesis.sn_source_power.magnitude == 70.0
+    assert synthesis.zn_source_power.magnitude == 64.0
 
     # Verify experimental results
     assert len(archive.data.experimental_results) == 2
@@ -192,11 +192,13 @@ def test_parse_synthesis_parameters(temp_sample_hierarchy):
     parser.parse(str(synthesis_file), archive, logger)
 
     synthesis = archive.data.synthesis_info
-    assert synthesis.pressure_mtorr == 15.0
-    assert synthesis.chamber_pressure_mbar == 100.0
-    assert synthesis.process_time_min == 10.0
-    assert synthesis.cooling_time_min == 60.0
-    assert synthesis.cooling_rate_degc_min == pytest.approx(8.333333333, rel=1e-5)
+    # Handle both Quantity objects and plain floats
+    assert (synthesis.pressure_mtorr.magnitude if hasattr(synthesis.pressure_mtorr, 'magnitude') else synthesis.pressure_mtorr) == 15.0
+    assert (synthesis.chamber_pressure_mbar.magnitude if hasattr(synthesis.chamber_pressure_mbar, 'magnitude') else synthesis.chamber_pressure_mbar) == 100.0
+    assert (synthesis.process_time_min.magnitude if hasattr(synthesis.process_time_min, 'magnitude') else synthesis.process_time_min) == 10.0
+    assert (synthesis.cooling_time_min.magnitude if hasattr(synthesis.cooling_time_min, 'magnitude') else synthesis.cooling_time_min) == 60.0
+    cooling_rate = synthesis.cooling_rate_degc_min.magnitude if hasattr(synthesis.cooling_rate_degc_min, 'magnitude') else synthesis.cooling_rate_degc_min
+    assert cooling_rate == pytest.approx(8.333333333, rel=1e-5)
 
 
 def test_parse_image_metadata_in_experiments(temp_sample_hierarchy):

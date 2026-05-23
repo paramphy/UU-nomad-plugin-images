@@ -9,6 +9,9 @@ Creates an ImageData entry with complete metadata structure.
 """
 
 import json
+import zipfile
+import tempfile
+import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -54,28 +57,124 @@ class ImageParser(MatchingParser):
         """
         try:
             mainfile_path = Path(mainfile)
-            
-            if logger:
-                logger.info(f'Parsing image data from: {mainfile_path.name}')
-            
-            # Create SingleImageEntry entry
-            image_entry = SingleImageEntry()
-            
-            # Extract timestamp from parent folder name
-            timestamp = mainfile_path.parent.name
-            image_entry.name = f'Image_{timestamp}'
-            
-            # Read metadata.json
-            try:
-                with open(mainfile_path, 'r') as f:
-                    metadata_dict = json.load(f)
+            tmpdir = None
+
+            # If a zip archive was uploaded, extract and locate the metadata.json
+            if mainfile_path.suffix.lower() == '.zip':
                 if logger:
-                    logger.info(f'Loaded metadata with keys: {list(metadata_dict.keys())}')
-            except Exception as e:
+                    logger.info(f'Detected zip archive: {mainfile_path.name}, extracting to parse metadata')
+                tmpdir = tempfile.mkdtemp()
+                try:
+                        with zipfile.ZipFile(mainfile_path, 'r') as zf:
+                            # find metadata files inside the zip
+                            candidates = [n for n in zf.namelist() if n.endswith('metadata.json')]
+                            if not candidates:
+                                if logger:
+                                    logger.error(f'No metadata.json found inside archive: {mainfile_path.name}')
+                                archive.data = SingleImageEntry()
+                                return
+                            # pick the first metadata.json
+                            metadata_name = candidates[0]
+                            # Extract the metadata and any .npy in the same folder
+                            zf.extract(metadata_name, path=tmpdir)
+                            metadata_extracted_path = Path(tmpdir) / metadata_name
+                            parent_folder = metadata_extracted_path.parent
+
+                            # Try to find a corresponding .npy in the same folder
+                            # Find .npy candidates. Prefer same folder first.
+                            npy_candidates_same = [n for n in zf.namelist() if n.startswith(str(Path(metadata_name).parent)) and n.lower().endswith('.npy')]
+                            npy_candidates_all = [n for n in zf.namelist() if n.lower().endswith('.npy')]
+
+                            def pick_best_npy(candidates, metadata_name_basename):
+                                # priority list: exact names, same basename, contains keywords, any
+                                exact_names = ['image_raw.npy', 'raw_image.npy']
+                                # normalize candidates to pathlib-like names for stem checks
+                                # candidates are archive internal paths
+                                # 1) exact name in same folder
+                                for name in candidates:
+                                    if Path(name).name.lower() in exact_names:
+                                        return name
+                                # 2) same basename as metadata (metadata name without extension)
+                                for name in candidates:
+                                    if Path(name).stem == metadata_name_basename:
+                                        return name
+                                # 3) contains 'image' or 'raw' heuristics
+                                for name in candidates:
+                                    if 'image' in Path(name).stem.lower() or 'raw' in Path(name).stem.lower():
+                                        return name
+                                # 4) fallback: first candidate
+                                return candidates[0] if candidates else None
+
+                            npy_extracted_path = None
+                            selected_npy = None
+                            metadata_basename = Path(metadata_name).stem
+                            if npy_candidates_same:
+                                selected_npy = pick_best_npy(npy_candidates_same, metadata_basename)
+                            elif npy_candidates_all:
+                                selected_npy = pick_best_npy(npy_candidates_all, metadata_basename)
+
+                            if selected_npy:
+                                # extract selected npy
+                                zf.extract(selected_npy, path=tmpdir)
+                                npy_extracted_path = Path(tmpdir) / selected_npy
+
+                            # Continue parsing using extracted files
+                            # Read metadata.json
+                            try:
+                                with open(metadata_extracted_path, 'r') as f:
+                                    metadata_dict = json.load(f)
+                            except Exception as e:
+                                if logger:
+                                    logger.error(f'Error reading extracted metadata.json: {e}')
+                                archive.data = SingleImageEntry()
+                                return
+
+                            # Set up SingleImageEntry and attempt to load npy if available
+                            image_entry = SingleImageEntry()
+                            timestamp = parent_folder.name
+                            image_entry.name = f'Image_{timestamp}'
+
+                            # parse metadata into ImageMetadata etc. (fall through to reuse logic below)
+                            # we will set metadata_dict and npy_extracted_path variables and continue
+                            # by not returning here
+                            # Assign locals expected by remaining code
+                            extracted_metadata = metadata_dict
+                            extracted_npy_path = npy_extracted_path
+                except zipfile.BadZipFile:
+                    if logger:
+                        logger.error(f'Bad zip file: {mainfile_path}')
+                    archive.data = SingleImageEntry()
+                    return
+                # Use extracted values for the main parsing flow
+                metadata_dict = extracted_metadata
+                npy_file = extracted_npy_path
+                # continue below to build the entry
                 if logger:
-                    logger.error(f'Error reading metadata.json: {str(e)}')
-                archive.data = image_entry
-                return
+                    logger.info(f'Loaded metadata from archive: {metadata_name}')
+                # Create SingleImageEntry entry
+                # note: image_entry already created above
+                
+                # Continue with parsing using metadata_dict and npy_file
+            else:
+                if logger:
+                    logger.info(f'Parsing image data from: {mainfile_path.name}')
+                # Create SingleImageEntry entry
+                image_entry = SingleImageEntry()
+                # Extract timestamp from parent folder name
+                timestamp = mainfile_path.parent.name
+                image_entry.name = f'Image_{timestamp}'
+                # Read metadata.json
+                try:
+                    with open(mainfile_path, 'r') as f:
+                        metadata_dict = json.load(f)
+                    if logger:
+                        logger.info(f'Loaded metadata with keys: {list(metadata_dict.keys())}')
+                except Exception as e:
+                    if logger:
+                        logger.error(f'Error reading metadata.json: {str(e)}')
+                    archive.data = image_entry
+                    return
+            
             
             # Parse ImageMetadata (Acquisition Settings)
             image_entry.metadata = ImageMetadata()
@@ -120,8 +219,9 @@ class ImageParser(MatchingParser):
                     image_entry.roi.bounding_box.height = int(bbox_dict.get('height', 0))
             
             # Find and reference the .npy file
-            npy_file = mainfile_path.parent / 'image_raw.npy'
-            if npy_file.exists():
+            if mainfile_path.suffix.lower() != '.zip':
+                npy_file = mainfile_path.parent / 'image_raw.npy'
+            if npy_file and npy_file.exists():
                 # Store relative path from the folder containing metadata.json
                 # This is more reliable when files are moved/extracted
                 image_entry.npy_file_path = str(npy_file.relative_to(npy_file.parent.parent))
@@ -169,3 +269,6 @@ class ImageParser(MatchingParser):
                 logger.error(traceback.format_exc())
             # Create minimal entry on error
             archive.data = SingleImageEntry()
+        finally:
+            if tmpdir:
+                shutil.rmtree(tmpdir, ignore_errors=True)

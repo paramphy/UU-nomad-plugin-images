@@ -6,6 +6,7 @@ Tests the parsing of metadata.json and image_raw.npy files.
 
 import json
 import logging
+import zipfile
 from pathlib import Path
 
 import numpy as np
@@ -71,7 +72,6 @@ def test_parser_initialization():
     assert parser is not None
     assert parser.name == 'ImageParser'
 
-
 def test_parse_metadata_only(tmp_path, sample_metadata):
     """Test parsing a metadata.json file."""
     # Create a metadata.json file
@@ -126,13 +126,43 @@ def test_parse_with_actual_data(test_data_dir):
     logger = logging.getLogger()
 
     parser.parse(str(metadata_file), archive, logger)
-
-    # Verify structure
     assert archive.data is not None
     assert archive.data.metadata is not None
     assert archive.data.dimensions is not None
     assert archive.data.roi is not None
     assert archive.data.npy_file_path is not None
+
+
+def test_parse_zip_archive(tmp_path, sample_metadata):
+    """Test parsing when the main file is a zip archive containing metadata and npy."""
+    zip_path = tmp_path / 'sample_archive.zip'
+    metadata_path = Path('sample_folder') / 'metadata.json'
+    npy_path = Path('sample_folder') / 'image_raw.npy'
+
+    test_array = np.random.randint(0, 256, size=(10, 10, 3), dtype=np.uint8)
+    with zipfile.ZipFile(zip_path, 'w') as zf:
+        zf.writestr(str(metadata_path), json.dumps(sample_metadata))
+
+    temp_npy = tmp_path / 'image_raw.npy'
+    np.save(temp_npy, test_array)
+    with zipfile.ZipFile(zip_path, 'a') as zf:
+        zf.write(temp_npy, arcname=str(npy_path))
+
+    parser = ImageParser(
+        name='ImageParser',
+        description='Test parser',
+        mainfile_name_re=r'metadata\.json',
+    )
+    archive = EntryArchive()
+    logger = logging.getLogger()
+
+    parser.parse(str(zip_path), archive, logger)
+
+    assert archive.data is not None
+    assert archive.data.metadata is not None
+    assert archive.data.metadata.timestamp == sample_metadata['timestamp']
+    assert archive.data.npy_file_path is not None
+    assert archive.data.npy_file_path.endswith('image_raw.npy')
 
 
 def test_bounding_box_extraction():

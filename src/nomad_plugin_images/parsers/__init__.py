@@ -31,21 +31,22 @@ class HierarchicalSampleParserEntryPoint(ParserEntryPoint):
 image_parser = ImageParserEntryPoint(
     name='ImageParser',
     description='Parser for image analysis data with metadata.json files.',
-    mainfile_name_re=r'metadata\.json',
-    mainfile_mime_re=r'application/json',
+    # Accept direct metadata.json files or zip archives containing them
+    mainfile_name_re=r'(^metadata\.json$|.*\.zip$)',
+    mainfile_mime_re=r'application/json|application/zip',
 )
 
 manifest_parser = ManifestParserEntryPoint(
     name='ImageManifestParser',
     description='Parser for image experiment manifest CSV files with multiple image steps.',
-    mainfile_name_re=r'.+_manifest\.csv',
+    mainfile_name_re=r'.*_manifest\.csv$',
     mainfile_mime_re=r'text/csv',
 )
 
 hierarchical_parser = HierarchicalSampleParserEntryPoint(
     name='HierarchicalSampleParser',
     description='Parser for hierarchical sample data with synthesis info and experimental results.',
-    mainfile_name_re=r'CuSnZnS_\d+\.json|^[A-Za-z0-9_]+\.json$',
+    mainfile_name_re=r'^CuSnZnS_\d+\.json$|^[A-Za-z0-9_]+_sample\.json$',
     mainfile_mime_re=r'application/json',
 )
 
