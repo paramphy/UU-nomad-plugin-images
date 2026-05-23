@@ -2,11 +2,11 @@ from nomad.config.models.plugins import AppEntryPoint
 from nomad.config.models.ui import App, Column, Columns, FilterMenu, FilterMenus
 
 app_entry_point = AppEntryPoint(
-    name='NewApp',
-    description='New app entry point configuration.',
+    name='ImagesAppEntryPoint',
+    description='Images app entry point configuration.',
     app=App(
-        label='NewApp',
-        path='app',
+        label='ImagesApp',
+        path='images',
         category='simulation',
         columns=Columns(
             selected=['entry_id'],
